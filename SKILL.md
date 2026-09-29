@@ -124,23 +124,17 @@ lark-cli base +record-upsert --as user --base-token <BASE_TOKEN> --table-id <TAB
 
 Tell the user: title, category/sub-tag, Likes/Views, position within the group, links to the doc and the Bitable, plus the classification rationale (especially for boundary cases).
 
-## Maintenance: refreshing the 「是否重复」 column
+## Maintenance: the 「是否重复」 column (self-computing formula field)
 
-The table has a select field 「是否重复」 (option: `重复`). **Bitable formulas cannot count across rows**, so this column is maintained by recomputation — rerun after every batch intake:
+The table has a **formula field** 「是否重复」 with expression:
 
-```bash
-# 1) Cloud aggregate: group by 帖子链接, count (top count > 1 = duplicates exist)
-lark-cli base +data-query --as user --base-token <BASE_TOKEN> --table-id <TABLE_ID> --dsl '{
-  "datasource": {"type": "table", "table": {"tableId": "<TABLE_ID>"}},
-  "dimensions": [{"field_name": "帖子链接", "alias": "link"}],
-  "measures": [{"field_name": "帖子链接", "aggregation": "count", "alias": "cnt"}],
-  "sort": [{"field_name": "cnt", "order": "desc"}],
-  "pagination": {"limit": 20}, "shaper": {"format": "flat"}
-}'
-# 2) For every link with count >= 2: record-search to list its records,
-#    then batch-update "是否重复":"重复" on all of them.
-# 3) Reverse cleanup: clear the mark on records that no longer duplicate.
 ```
+IF([Opus 5.5].COUNTIF(CurrentValue.[帖子链接] = [帖子链接]) >= 2, "重复", "")
+```
+
+- How it works: `[TableName].COUNTIF(...)` takes the whole table as data range; `CurrentValue.[帖子链接]` is the iterated row's link, `[帖子链接]` is the formula row's link. Count ≥ 2 → shows 「重复」. It auto-marks new duplicates and auto-clears when a duplicate is removed — no recomputation needed.
+- **⚠️ The expression references the table by NAME (currently `Opus 5.5`; the table-id `<TABLE_ID>` is stable). If the table gets renamed, the formula breaks and must be rewritten with the new name.**
+- Writing a formula field: `lark-cli base +field-update --json '{"type":"formula","name":"是否重复","expression":"..."}' --yes --i-have-read-guide` (formula type requires `--i-have-read-guide`).
 
 ## Hard rules
 
