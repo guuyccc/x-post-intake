@@ -25,7 +25,9 @@ The skill needs four target identifiers. **On first run, ask the user for the Fe
 
 ## Workflow
 
-### Step 0: Pick the post
+### Step 0: Pick the post (first run: ask for the user's name)
+
+**On first use, ask the user: 「你叫什么名字？」** — the answer becomes the default 「来源」 value for every record written (e.g. `yicheng`); when recording on someone else's behalf, use that person's name instead. Then continue with post selection:
 
 - User pastes `https://x.com/<handle>/status/<tweet_id>` → extract the tweet id, go to step 1.
 - User says "pick from my bookmarks" → via the browser bridge, open `https://x.com/i/history` (logged-in Bookmarks), scroll and collect articles (author, time, status link), present the list for the user to choose.
@@ -110,7 +112,7 @@ Bitable fields — write exactly these, names are case-sensitive:
 | 一句话概括 | text | from step 5 |
 | 帖子链接 | text(url) | `https://x.com/<handle>/status/<tweet_id>` |
 | 发布日期 | datetime | tweet `created_at` → ms epoch |
-| 来源 | select | `X 收藏夹` (from bookmarks) / `初始调研` (other channels) |
+| 来源 | select | **contributor's name** (e.g. `yicheng`). On first use, ask the user "你叫什么名字？" and default to their answer; when recording on someone else's behalf, use that person's name. Legacy values: `初始调研`, `X 收藏夹` (do not write these anymore) |
 | 已进文档 | select | `已进文档` (wall insertion done) / `未进文档` (recorded only) |
 
 ```bash
