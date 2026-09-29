@@ -31,12 +31,12 @@ The skill needs four target identifiers. **On first run, ask the user for the Fe
 - User says "pick from my bookmarks" → via the browser bridge, open `https://x.com/i/history` (logged-in Bookmarks), scroll and collect articles (author, time, status link), present the list for the user to choose.
 - Multiple posts → repeat the whole pipeline per post.
 
-### Step 1: Deduplicate (skip on any hit)
+### Step 1: Deduplicate (skip and name the duplicate)
 
-1. Bitable: `lark-cli base +record-search --as user --base-token <BASE_TOKEN> --table-id <TABLE_ID> --json '{"keyword":"<tweet_id>","search_fields":["帖子链接"],"select_fields":["标题"],"limit":5}'`
+1. Bitable: `lark-cli base +record-search --as user --base-token <BASE_TOKEN> --table-id <TABLE_ID> --json '{"keyword":"<tweet_id>","search_fields":["帖子链接"],"select_fields":["标题","分类","子类"],"limit":5}'`
 2. Doc: `lark-cli docs +fetch --api-version v2 --doc <DOCX_DOCUMENT_ID> --scope keyword --keyword "<tweet_id>"`
 
-If either hits, tell the user it's already recorded and skip.
+If either hits, **tell the user exactly which existing entry it duplicates**: 「该帖已收录，与《{标题}》（{分类}/{子类}）重复，跳过。」(Use the returned Bitable fields when the table hits; use the cell's bold title from the doc when only the doc hits.) Never just say "duplicate" without naming it. In batch runs, name-and-skip each duplicate and keep processing the rest.
 
 ### Step 2: Fetch tweet metadata
 

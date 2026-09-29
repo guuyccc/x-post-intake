@@ -12,7 +12,7 @@ Given one post link (or a pick from the user's X bookmarks), the agent will:
 - insert a formatted cell into a categorized "case wall" in a Feishu doc, sorted by likes (rebuilding the target table, preserving teammates' edits)
 - hunt for a shared prompt or related link in the post and the author's replies (with an X-search fallback when the reply feed fails to load) and append it to the cell
 - record everything in a Feishu Bitable with a strict, documented field schema
-- deduplicate against both the doc and the Bitable before writing anything
+- deduplicate against both the doc and the Bitable before writing anything, and name the exact existing entry when a duplicate is found (「该帖已收录，与《标题》（分类/子类）重复，跳过。」)
 
 ## Install
 
