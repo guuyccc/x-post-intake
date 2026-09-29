@@ -1,0 +1,133 @@
+---
+name: x-post-intake
+description: Turn an X (Twitter) post into a fully-formatted research entry — fetch content and metrics, write a title and one-line summary, classify into a fixed taxonomy, insert into a categorized "case wall" in a Feishu/Lark doc (sorted by likes), and record it in a Feishu Bitable. Use when the user says "record this X post", "add this post to the table", "process my X bookmarks", or pastes an x.com/twitter.com status link for intake.
+---
+
+# X Post Intake (social case research)
+
+Turn one X post into a cell in a categorized case wall inside a Feishu doc + one record in a Feishu Bitable, with consistent formatting, metrics, and classification.
+
+## Prerequisites
+
+- Skills available: `lark-doc` (Feishu docs), `lark-base` (Feishu Bitable), `kimi-webbridge` or an equivalent logged-in-browser bridge (scraping view counts and the user's bookmarks).
+- Read each skill's reference docs before calling their commands.
+
+## Project constants (fill in on first run)
+
+The skill needs four target identifiers. **On first run, ask the user for the Feishu doc and Bitable links, resolve the IDs below, and write them into this table before proceeding.** Keep real internal tokens out of the shared/public copy of this skill.
+
+| Item | Value |
+|---|---|
+| Research doc doc_id | `<DOCX_DOCUMENT_ID>` (the `/docx/` id, resolvable from a `/wiki/` link) |
+| Case-wall section block id | `<SECTION_H2_BLOCK_ID>` (the h2 heading that parents the wall) |
+| Bitable base-token | `<BASE_TOKEN>` |
+| Bitable table-id | `<TABLE_ID>` (starts with `tbl`) |
+
+## Workflow
+
+### Step 0: Pick the post
+
+- User pastes `https://x.com/<handle>/status/<tweet_id>` → extract the tweet id, go to step 1.
+- User says "pick from my bookmarks" → via the browser bridge, open `https://x.com/i/history` (logged-in Bookmarks), scroll and collect articles (author, time, status link), present the list for the user to choose.
+- Multiple posts → repeat the whole pipeline per post.
+
+### Step 1: Deduplicate (skip on any hit)
+
+1. Bitable: `lark-cli base +record-search --as user --base-token <BASE_TOKEN> --table-id <TABLE_ID> --json '{"keyword":"<tweet_id>","search_fields":["帖子链接"],"select_fields":["标题"],"limit":5}'`
+2. Doc: `lark-cli docs +fetch --api-version v2 --doc <DOCX_DOCUMENT_ID> --scope keyword --keyword "<tweet_id>"`
+
+If either hits, tell the user it's already recorded and skip.
+
+### Step 2: Fetch tweet metadata
+
+```bash
+python3 scripts/tweet_meta.py <tweet_id>
+```
+
+Returns JSON: `handle / name / text / likes / created_at / media_type / poster_url / duration_s / url` (media inside `quoted_tweet` is handled; `likes` = the post's own `favorite_count`).
+
+### Step 3: Scrape Views
+
+The syndication API has no view count — open the post in the logged-in browser:
+
+1. `navigate` to the post URL, wait ~6s.
+2. `evaluate`:
+```js
+const a=[...document.querySelectorAll("a")].find(x=>x.href.includes("/analytics"));
+a ? a.textContent.replace(" Views","") : null
+```
+3. Record the X-native format verbatim (`1.5M`, `690.5K`, `5,850`) — **do not convert**.
+4. If unavailable → write `待补` and note it in the final report.
+
+### Step 4: Cover image
+
+**Do not download videos or make GIFs** (Feishu degrades GIFs in heavy docs to static previews). Use the post's own cover:
+
+- Video post: `poster_url` (the `media_url_https` amplify_video_thumb).
+- Photo post: the photo itself.
+- Download it locally, then upload into the doc to get a token:
+```bash
+lark-cli docs +media-insert --doc <DOCX_DOCUMENT_ID> --file <cover_file>
+```
+Returns `file_token` + a temp `block_id` appended at doc end (delete it in step 6).
+- Note: `<img href="URL">` does NOT work for pbs.twimg.com (Feishu's server-side fetch is blocked) — you must download and upload.
+
+### Step 5: Title, summary, classification, prompt links
+
+Follow [`references/standards.md`](references/standards.md) exactly. Four outputs:
+
+1. **Title**: 4–14 char Chinese label saying what the case does.
+2. **One-line summary**: what it does + the author's own evaluation quoted in「」.
+3. **Classification**: one of the 5 categories + one sub-tag (boundary rules in standards.md).
+4. **Prompt / related links**: scan the post text AND the author's own replies for a shared prompt or related link (prompt doc, playable link, tool/Skill link; if the prompt only exists as a reply tweet, link that reply). Append at the very end of the cell: `<p>🔗 <a href="{url}">Prompt</a></p>` or `<p>🔗 <a href="{url}">相关链接</a></p>` (one per line).
+
+> **⚠️ Reply-feed pitfall**: X post pages often fail to load replies (only the main article renders). Fallback: X search `https://x.com/search?q=from%3A<handle>%20<keyword>&f=live` (keyword: prompt / skill / link / 提示词), and find the author's "Replying to @self" tweet around the same date containing the prompt or link. Resolve `t.co` shortlinks with `curl -sIL -o /dev/null -w '%{url_effective}'`.
+
+### Step 6: Insert into the case wall (likes-desc order)
+
+Wall structure: h3 category → h4 sub-tag → 3-column `<table>`, cells sorted by Likes descending. **Feishu cannot add rows/cells to an existing table — you must rebuild the target table:**
+
+1. `docs +fetch --api-version v2 --doc <DOCX_DOCUMENT_ID> --scope section --start-block-id <SECTION_H2_BLOCK_ID> --detail with-ids`; find the `<table>` right after the target h4 (sub-tag name).
+2. Parse every `<td>`: keep its full inner XML (strip ` id="..."` attrs), parse likes from `❤️ ... Likes`.
+3. Insert the new cell (template in standards.md) at the likes-desc position, rebuild the whole `<table>` (`<colgroup><col width="290"/>×3`).
+4. `block_insert_after` the new table after the old one, then `block_delete` the old one.
+5. **⚠️ If a cell contains a `<figure>` (e.g. an mp4 attachment card)**: strip the figure from the XML before rebuild, and before deleting the old table use `block_move_after` to move the figure into the matching cell of the new table (anchor = the cell's last `<p>` block id).
+6. If the sub-tag group has no table yet (e.g. an empty "（待补充）" group): insert the new table right after that h4, and remove the「（待补充）」marker from the h4 text.
+7. Delete the temp upload block from step 4.
+
+### Step 7: Write the Bitable record
+
+Bitable fields — write exactly these, names are case-sensitive:
+
+| Field | Type | Rule |
+|---|---|---|
+| 标题 | text | from step 5 |
+| 作者 | text | `@handle` |
+| 分类 | select | 代码动画 / 动效动画 / 3D 场景与交互 / 三方软件接入 / 真实世界交互 (strict, never add options) |
+| 子类 | select | 叙事短片 / 风格实验 / 产品宣发 / 游戏 / 场景 / 仿真 / 其他 / 真实建模 / 物理操控 (strict) |
+| Likes | number | integer |
+| Views | text | X-native value; `待补` if missing |
+| 一句话概括 | text | from step 5 |
+| 帖子链接 | text(url) | `https://x.com/<handle>/status/<tweet_id>` |
+| 发布日期 | datetime | tweet `created_at` → ms epoch |
+| 来源 | select | `X 收藏夹` (from bookmarks) / `初始调研` (other channels) |
+| 已进文档 | select | `已进文档` (wall insertion done) / `未进文档` (recorded only) |
+
+```bash
+lark-cli base +record-upsert --as user --base-token <BASE_TOKEN> --table-id <TABLE_ID> \
+  --json '{"标题":"...","作者":"@handle","分类":"...","子类":"...","Likes":1234,"Views":"...","一句话概括":"...","帖子链接":"https://x.com/handle/status/<tweet_id>","发布日期":<ms_epoch>,"来源":"X 收藏夹","已进文档":"已进文档"}'
+```
+
+> If the schema ever changes, run `lark-cli base +field-list --as user --base-token <BASE_TOKEN> --table-id <TABLE_ID>` first and update this file to match.
+
+### Step 8: Report
+
+Tell the user: title, category/sub-tag, Likes/Views, position within the group, links to the doc and the Bitable, plus the classification rationale (especially for boundary cases).
+
+## Hard rules
+
+- **Order**: dedupe first; gather all data before writing; rebuild the new table before deleting the old one.
+- **Sorting**: strictly Likes descending within each group, left-to-right, top-to-bottom.
+- **Images**: static covers only — no GIFs, no video blocks (not supported by the API).
+- **Others' content**: teammates may add screenshots, localized stats lines, attachment cards to cells — preserve cell XML verbatim when rebuilding tables.
+- **Concurrency**: run all lark-cli writes sequentially, never in parallel.
