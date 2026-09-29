@@ -124,6 +124,24 @@ lark-cli base +record-upsert --as user --base-token <BASE_TOKEN> --table-id <TAB
 
 Tell the user: title, category/sub-tag, Likes/Views, position within the group, links to the doc and the Bitable, plus the classification rationale (especially for boundary cases).
 
+## Maintenance: refreshing the 「是否重复」 column
+
+The table has a select field 「是否重复」 (option: `重复`). **Bitable formulas cannot count across rows**, so this column is maintained by recomputation — rerun after every batch intake:
+
+```bash
+# 1) Cloud aggregate: group by 帖子链接, count (top count > 1 = duplicates exist)
+lark-cli base +data-query --as user --base-token <BASE_TOKEN> --table-id <TABLE_ID> --dsl '{
+  "datasource": {"type": "table", "table": {"tableId": "<TABLE_ID>"}},
+  "dimensions": [{"field_name": "帖子链接", "alias": "link"}],
+  "measures": [{"field_name": "帖子链接", "aggregation": "count", "alias": "cnt"}],
+  "sort": [{"field_name": "cnt", "order": "desc"}],
+  "pagination": {"limit": 20}, "shaper": {"format": "flat"}
+}'
+# 2) For every link with count >= 2: record-search to list its records,
+#    then batch-update "是否重复":"重复" on all of them.
+# 3) Reverse cleanup: clear the mark on records that no longer duplicate.
+```
+
 ## Hard rules
 
 - **Order**: dedupe first; gather all data before writing; rebuild the new table before deleting the old one.
