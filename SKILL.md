@@ -14,23 +14,32 @@ Turn one X post into a cell in a categorized case wall inside a Feishu doc + one
 
 ## Project constants (fill in on first run)
 
-The skill needs four target identifiers. **On first run, ask the user for the Feishu doc and Bitable links, resolve the IDs below, and write them into this table before proceeding.** Keep real internal tokens out of the shared/public copy of this skill.
+The skill needs the target document and table identifiers. **On first run, ask the user for the Feishu doc and Bitable links, resolve the IDs below, and write them into this table before proceeding.** Keep real internal tokens out of the shared/public copy of this skill.
 
 | Item | Value |
 |---|---|
 | Research doc doc_id | `<DOCX_DOCUMENT_ID>` (the `/docx/` id, resolvable from a `/wiki/` link) |
-| Case-wall section block id | `<SECTION_H2_BLOCK_ID>` (the h2 heading that parents the wall) |
 | Bitable base-token | `<BASE_TOKEN>` |
-| Bitable table-id | `<TABLE_ID>` (starts with `tbl`) |
+
+### Model sections inside the doc (h2 block ids)
+
+| Section | block id |
+|---|---|
+| Sonnet 5.5 | `<H2_SONNET>` |
+| 🔥 Opus 5.5 社媒 | `<H2_OPUS>` |
+| 💵 GPT 6 Luna | `<H2_LUNA>` |
+| 🔥 GPT 6 Sol 社媒 | `<H2_SOL>` |
 
 ### Target-table routing
 
-| Post content / folder name | Target Bitable | Insert into doc case wall? |
+| Post content / folder name | Target Bitable | Wall section |
 |---|---|---|
-| Default (Opus 5.5 related) | main table (`<TABLE_ID>`) | yes |
-| Sonnet 5.5 related / "Sonnet 5.5" folder | secondary table (same base, e.g. `<SONNET_TABLE_ID>`) | no — 「已进文档」 = `未进文档` |
+| Default (Opus 5.5 related) | main table (`<TABLE_ID>`) | Opus section (h4 sub-tag group tables) |
+| Sonnet 5.5 related / "Sonnet 5.5" folder | secondary table (same base, e.g. `<SONNET_TABLE_ID>`) | Sonnet section (single table) |
+| GPT 6 Luna related | main table (until a Luna table exists) | Luna section (single table) |
+| GPT 6 Sol related | main table (until a Sol table exists) | Sol section (single table) |
 
-> Add one row here for each new model-tracking table; set 「已进文档」 according to whether the wall insertion actually happened.
+> Add one row per new model table/section; set 「已进文档」 according to whether the wall insertion actually happened.
 
 ## Workflow
 
@@ -102,17 +111,19 @@ Follow [`references/standards.md`](references/standards.md) exactly. Four output
 
 > **⚠️ Reply-feed pitfall**: X post pages often fail to load replies (only the main article renders). Fallback: X search `https://x.com/search?q=from%3A<handle>%20<keyword>&f=live` (keyword: prompt / skill / link / 提示词), and find the author's "Replying to @self" tweet around the same date containing the prompt or link. Resolve `t.co` shortlinks with `curl -sIL -o /dev/null -w '%{url_effective}'`.
 
-### Step 6: Insert into the case wall (likes-desc order)
+### Step 6: Insert into the case wall (likes-desc, per model section)
 
-Wall structure: h3 category → h4 sub-tag → 3-column `<table>`, cells sorted by Likes descending. **Feishu cannot add rows/cells to an existing table — you must rebuild the target table:**
+The doc is organized by model: h2 model section → (inside the Opus section also h3 category → h4 sub-tag) → 3-column `<table>`, cells sorted by Likes descending. **Feishu cannot add rows/cells to an existing table — you must rebuild the target table:**
 
-1. `docs +fetch --api-version v2 --doc <DOCX_DOCUMENT_ID> --scope section --start-block-id <SECTION_H2_BLOCK_ID> --detail with-ids`; find the `<table>` right after the target h4 (sub-tag name).
-2. Parse every `<td>`: keep its full inner XML (strip ` id="..."` attrs), parse likes from `❤️ ... Likes`.
-3. Insert the new cell (template in standards.md) at the likes-desc position, rebuild the whole `<table>` (`<colgroup><col width="290"/>×3`).
-4. `block_insert_after` the new table after the old one, then `block_delete` the old one.
+1. Pick the target section from the routing table, then:
+   `docs +fetch --api-version v2 --doc <DOCX_DOCUMENT_ID> --scope section --start-block-id <SECTION_H2_ID> --detail with-ids`
+2. Locate the target table:
+   - **Opus section**: find the `<table>` right after the target h4 sub-tag （叙事短片/风格实验/产品宣发/游戏/场景/仿真/其他/真实建模/物理操控）; if that sub-tag group has no table yet, insert a new table right after that h4 (skip to step 4).
+   - **Sonnet / Luna / Sol sections**: a single 3-column table lives directly under the section — rebuild it; if none exists, insert a new one after the h2 (for Sol: after the h4 Computer Use).
+3. Parse every `<td>`: keep its full inner XML (strip ` id="..."` attrs), parse likes from `❤️ ... Likes`. Insert the new cell (template in standards.md) at the likes-desc position, rebuild the whole `<table>` (`<colgroup><col width="290"/>×3`).
+4. `block_insert_after` the new table after the old one (or after the h2/h4 anchor when creating), then `block_delete` the old one.
 5. **⚠️ If a cell contains a `<figure>` (e.g. an mp4 attachment card)**: strip the figure from the XML before rebuild, and before deleting the old table use `block_move_after` to move the figure into the matching cell of the new table (anchor = the cell's last `<p>` block id).
-6. If the sub-tag group has no table yet (e.g. an empty "（待补充）" group): insert the new table right after that h4, and remove the「（待补充）」marker from the h4 text.
-7. Delete the temp upload block from step 4.
+6. Delete the temp upload block from step 4.
 
 ### Step 7: Write the Bitable record
 
