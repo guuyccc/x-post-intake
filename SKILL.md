@@ -23,15 +23,32 @@ The skill needs four target identifiers. **On first run, ask the user for the Fe
 | Bitable base-token | `<BASE_TOKEN>` |
 | Bitable table-id | `<TABLE_ID>` (starts with `tbl`) |
 
+### Target-table routing
+
+| Post content / folder name | Target Bitable | Insert into doc case wall? |
+|---|---|---|
+| Default (Opus 5.5 related) | main table (`<TABLE_ID>`) | yes |
+| Sonnet 5.5 related / "Sonnet 5.5" folder | secondary table (same base, e.g. `<SONNET_TABLE_ID>`) | no — 「已进文档」 = `未进文档` |
+
+> Add one row here for each new model-tracking table; set 「已进文档」 according to whether the wall insertion actually happened.
+
 ## Workflow
 
-### Step 0: Pick the post (first run: ask for the user's name)
+### Step 0: Input triage (three branches) + first-run name question
 
-**On first use, ask the user: 「你叫什么名字？」** — the answer becomes the default 「来源」 value for every record written (e.g. `yicheng`); when recording on someone else's behalf, use that person's name instead. Then continue with post selection:
+**On first use, ask the user: 「你叫什么名字？」** — the answer becomes the default 「来源」 value for every record written (e.g. `yicheng`); when recording on someone else's behalf, use that person's name. Then branch by input shape:
 
-- User pastes `https://x.com/<handle>/status/<tweet_id>` → extract the tweet id, go to step 1.
-- User says "pick from my bookmarks" → via the browser bridge, open `https://x.com/i/history` (logged-in Bookmarks), scroll and collect articles (author, time, status link), present the list for the user to choose.
-- Multiple posts → repeat the whole pipeline per post.
+| User provides | Detection rule | Flow |
+|---|---|---|
+| `https://x.com/<handle>/status/<tweet_id>` | URL contains `/status/` | **Single-post flow**: extract tweet id → step 1 |
+| Bookmark folder name (e.g. "Case Sept") or `x.com/i/history/bookmarks/<id>` or any `bookmarks` path | no `/status/` | **Folder batch flow**: enter the folder via the SOP in [`references/bookmark-folders.md`](references/bookmark-folders.md) → run step 1 per post |
+| Just "my bookmarks" | nothing specific | open `x.com/i/history`, list the folders (menuitemradio items in the dropdown) + the 10 most recent bookmarks, let the user pick |
+
+**Hard rules:**
+- A URL without `/status/` is **never a tweet id** — no syndication call, no post fetch.
+- **Never navigate directly** to a folder URL (`/i/history/bookmarks/<id>`) — X always returns "Something went wrong"; entry is only via the bookmarks-page dropdown.
+- Folder batch flow: after scraping the full list, do a **scope confirmation** — tell the user "「{folder}」共 N 帖：{title list}，是否全部处理？"; for N≤5 a brief list then proceed is fine, for N>5 wait for explicit confirmation.
+- Routing: if the folder name matches the routing table (e.g. "Sonnet 5.5") → the whole batch goes to that table; otherwise judge per post by content (Sonnet-5.5-mentioning posts → Sonnet table, everything else → default table).
 
 ### Step 1: Deduplicate (skip and name the duplicate)
 
