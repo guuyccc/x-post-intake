@@ -8,6 +8,14 @@
 <td vertical-align="top"><p><b>{标题}</b>｜<a href="{帖子URL}">@{handle} 原帖</a></p><img src="{封面token}" width="280" height="{按比例高度}" name="opus55_{英文小名}.jpg"/><blockquote><p>{一句话概括}</p></blockquote><p><span text-color="gray">▶️ {Views} Views · ❤️ {Likes 千分位} Likes</span></p></td>
 ```
 
+**「三方软件接入」类的单元格**在标题行与封面之间额外加一行工具标签（每个工具一个 `<code>`）：
+
+```xml
+<p><b>{标题}</b>｜<a href="{帖子URL}">@{handle} 原帖</a></p><p><code>Blender</code> <code>Unity</code></p><img .../>
+```
+
+工具名从帖子正文/视频里确认（如 `Blender`、`Unity`、`Unreal Engine`、`WoW`、`three.js`、`Blender MCP`、`GPT`），有几个写几个；只有「三方软件接入」大类加这行，其他类不加。
+
 - 图片宽固定 280，高按封面宽高比换算（封面抽帧/海报通常为 560 宽，高减半即可）。
 - `▶️` `·` `❤️` 与空格格式照抄模板；Views 用 X 显示原值（如 `1.5M`、`690.5K`、`5,850`）；Likes 用千分位数字。
 - XML 文本里 `&` `<` `>` 要转义；英文评价原文直接放「」里，不用转义引号。
